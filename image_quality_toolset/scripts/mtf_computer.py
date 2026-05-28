@@ -115,6 +115,11 @@ def process_algorithm(config_file, feedback=None):
                 gsd_value = abs(gt[1])
             else:
                 gsd_value = gsd
+
+            # Ensure image is not empty or all NaN
+            if image.size == 0 or np.all(np.isnan(image)):
+                raise ValueError("Cannot compute SNR: image is empty or contains only NaN values")
+
             mtf = SNR(vlayer, image, band_n, window_size, snr_precision,
                       L_min, L_max, feedback=feedback, debug=debug, debug_dir=debug_dir)
             mtf.variogram_snr(samples=nb_samples, gsd=gsd_value, lag=lag, plot=False)
@@ -152,7 +157,13 @@ def process_algorithm(config_file, feedback=None):
                 gsd_value = abs(gt[1])
             else:
                 gsd_value = gsd
-            mtf = SNR(img_array/np.nanmax(img_array), band_number=band_n, feedback=feedback, roi=None)
+
+            # Normalize image array safely
+            max_val = np.nanmax(img_array)
+            if max_val == 0 or np.isnan(max_val):
+                raise ValueError("Cannot normalize image array for SNR: max value is zero or all values are NaN")
+
+            mtf = SNR(img_array/max_val, band_number=band_n, feedback=feedback, roi=None)
             mtf.variogram_snr(samples=nb_samples, gsd=gsd_value, lag=lag, plot=True)
             mtf.compute_jacie_snr()
             mtf.second_method()
@@ -188,7 +199,13 @@ def process_algorithm(config_file, feedback=None):
                 gsd_value = abs(gt[1])
             else:
                 gsd_value = gsd
-            mtf = SNR(img_array/np.nanmax(img_array), band_number=band_n, feedback=feedback, roi=None)
+
+            # Normalize image array safely
+            max_val = np.nanmax(img_array)
+            if max_val == 0 or np.isnan(max_val):
+                raise ValueError("Cannot normalize image array for SNR: max value is zero or all values are NaN")
+
+            mtf = SNR(img_array/max_val, band_number=band_n, feedback=feedback, roi=None)
 
             mtf.variogram_snr(samples=nb_samples, gsd=gsd_value, lag=lag, plot=True)
             mtf.compute_jacie_snr()
@@ -246,6 +263,18 @@ def load_config(config_file):
                 # Try to parse as a dict (window_parameter)
                 roi_value = ast.literal_eval(roi_str)
                 if isinstance(roi_value, dict):
+                    # Validate ROI dictionary keys and values
+                    required_keys = {'line', 'pixel', 'line_number', 'pixel_number'}
+                    missing_keys = required_keys - set(roi_value.keys())
+                    if missing_keys:
+                        raise ValueError(f"ROI dictionary missing required keys: {missing_keys}")
+
+                    for key in required_keys:
+                        if not isinstance(roi_value[key], (int, float)):
+                            raise ValueError(f"ROI dictionary value for '{key}' must be numeric")
+                        if roi_value[key] < 0:
+                            raise ValueError(f"ROI dictionary value for '{key}' must be non-negative")
+
                     params['window_parameter'] = roi_value
                     params['shape_file'] = None
                 else:
